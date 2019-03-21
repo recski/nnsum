@@ -142,6 +142,8 @@ class SummarizationDataset(Dataset):
                 assert isent.tolist().index(0) == slen
             except ValueError:
                 assert isent.size(0) == slen
+            except AttributeError:
+                pass
 
         if self._targets_dir:
             targets_data = self._read_targets(raw_inputs_data, inp_data,
@@ -207,7 +209,7 @@ class SummarizationDatasetForBert(SummarizationDataset):
 
         features = []
         for sentence in data['inputs']:
-            tokens = self._tokenizer.tokenize(sentence)
+            tokens = self._tokenizer.tokenize(sentence['text'])
             if len(tokens) > self._max_seq_length - 2:
                 tokens = tokens[:(self._max_seq_length - 2)]
 

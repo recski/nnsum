@@ -43,7 +43,7 @@ def main():
     parser.add_argument(
         "--remove-stopwords", action="store_true", default=False)
     parser.add_argument(
-        "--summary-length", default=100, type=int) 
+        "--summary-length", default=100, type=int)
 
     nnsum.module.EmbeddingContext.update_command_line_options(parser)
     TransformerModel.update_command_line_options(parser)
@@ -52,7 +52,7 @@ def main():
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
- 
+
     if args.model_path:
         check_dir(args.model_path)
     if args.results_path:
@@ -64,7 +64,8 @@ def main():
         top_k=args.top_k, word_dropout=args.word_dropout,
         embedding_dropout=args.embedding_dropout,
         update_rule=args.update_rule,
-        embeddings_path=args.pretrained_embeddings,
+        # embeddings_path=args.pretrained_embeddings,
+        pretrained_embeddings=args.pretrained_embeddings,
         filter_pretrained=args.filter_pretrained)
 
     logging.info(" Loading training data.")
@@ -78,7 +79,7 @@ def main():
         args.valid_inputs, args.valid_labels, embedding_context.vocab,
         batch_size=args.batch_size,
         gpu=args.gpu)
-    
+
     if args.weighted:
         weight = nnsum.trainer.compute_class_weights(train_data)
     else:
@@ -118,14 +119,14 @@ def main():
     best_rouge = 0
     best_epoch = None
 
-    optim = torch.optim.Adam(model.parameters(), lr=.001, weight_decay=.00001) 
+    optim = torch.optim.Adam(model.parameters(), lr=.001, weight_decay=.00001)
 
     start_time = datetime.datetime.utcnow()
     logging.info(" Training start time: {}".format(start_time))
 
     for epoch in range(1, args.epochs + 1):
         logging.info(" *** Epoch {:4d} ***".format(epoch))
-     
+
         train_start_time = datetime.datetime.utcnow()
         train_xent = nnsum.trainer.train_epoch(
             optim, model, train_data, pos_weight=weight)
@@ -138,7 +139,7 @@ def main():
         valid_start_time = datetime.datetime.utcnow()
         valid_result = nnsum.trainer.validation_epoch(
             model, valid_data, args.valid_refs, pos_weight=weight,
-            remove_stopwords=args.remove_stopwords, 
+            remove_stopwords=args.remove_stopwords,
             summary_length=args.summary_length)
         valid_results.append(valid_result)
         valid_epoch_time = datetime.datetime.utcnow() - valid_start_time
@@ -161,7 +162,7 @@ def main():
             avg_tt = sum(train_times, datetime.timedelta(0)) / len(train_times)
             avg_vt = sum(valid_times, datetime.timedelta(0)) / len(valid_times)
             avg_epoch_time = avg_tt + avg_vt
-            time_remaining = avg_epoch_time * (args.epochs - epoch) 
+            time_remaining = avg_epoch_time * (args.epochs - epoch)
             ect = time_remaining + datetime.datetime.utcnow()
             time_elapsed = datetime.datetime.utcnow() - start_time
             logging.info(" Time elaspsed: {}".format(time_elapsed))
@@ -170,16 +171,16 @@ def main():
     logging.info(" Finished training @ {}\n".format(datetime.datetime.utcnow()))
     logging.info(" Best epoch: {}  ROUGE-1 {:0.3f}  ROUGE-2 {:0.3f}".format(
         best_epoch, *valid_results[best_epoch - 1][1:]))
-    
+
     if args.results_path is not None:
         results = {"training": {"cross-entropy": train_xents},
                    "validation": {
-                       "cross-entropy": [x[0] for x in valid_results], 
+                       "cross-entropy": [x[0] for x in valid_results],
                        "rouge-1": [x[1] for x in valid_results],
                        "rouge-2": [x[2] for x in valid_results]}}
         logging.info(" Writing results to {} ...".format(args.results_path))
         with open(args.results_path, "w") as fp:
-            fp.write(json.dumps(results)) 
+            fp.write(json.dumps(results))
 
 if __name__ == "__main__":
     main()
