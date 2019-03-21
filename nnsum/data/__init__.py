@@ -1,4 +1,6 @@
 from .summarization_dataset import SummarizationDataset
+from .summarization_dataset import SummarizationDatasetForBert
 from .sample_cache_dataset import SampleCacheDataset
 from .summarization_dataloader import SummarizationDataLoader
+from .summarization_dataloader import SummarizationDataLoaderForBert
 from .sample_cache_dataloader import SampleCacheDataLoader

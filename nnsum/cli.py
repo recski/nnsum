@@ -1,18 +1,18 @@
 import argparse
 import sys
 import pathlib
-from collections import defaultdict
 
 from nnsum.module import EmbeddingContext
 from nnsum.module import sentence_encoder as sent_enc
 from nnsum.module import sentence_extractor as sent_ext
-from nnsum.model import SummarizationModel
+from nnsum.model import SummarizationModel, SummarizationBertModel
 
 
 class ModuleArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super(ModuleArgumentParser, self).__init__(
             *args, usage=argparse.SUPPRESS, **kwargs)
+
 
 class ModuleArgumentSelector(object):
 
@@ -27,14 +27,15 @@ class ModuleArgumentSelector(object):
         self._help_msg[name] = help
 
     def print_help(self):
-        print("  {} ARG [... ARG_OPTIONS]".format(self._name)) 
+        print("  {} ARG [... ARG_OPTIONS]".format(self._name))
         print("  {}".format(self._desc))
         print("  Choices:")
         for mod_name in self._modules.keys():
             print("      {} {}".format(
                 mod_name, ":: " + self._help_msg[mod_name]))
-            print("             " + "\n             ".join(self._modules[mod_name].format_help().split("\n")))
-            
+            print("             " + "\n             ".join(
+                self._modules[mod_name].format_help().split("\n")))
+
     def parse_args(self, args=None):
         if args is None:
             args = sys.argv[1:]
@@ -46,8 +47,9 @@ class ModuleArgumentSelector(object):
             exit()
         else:
             r = vars(self._modules[args[0]].parse_args(args[1:]))
-            r["OPT"] = args[0] 
+            r["OPT"] = args[0]
             return r
+
 
 class MultiModuleParser(object):
     def __init__(self, prog, description=""):
@@ -103,7 +105,8 @@ class MultiModuleParser(object):
                 ", ".join(missing_args)))
             sys.exit()
 
-        return results   
+        return results
+
 
 def training_argparser():
 
@@ -123,7 +126,7 @@ def training_argparser():
     train_parser.add_argument(
         "--valid-refs", type=pathlib.Path, required=True,
         help="Path to directory of validation human reference summaries.")
-   
+
     train_parser.add_argument("--seed", default=48929234, type=int)
     train_parser.add_argument("--epochs", type=int, default=50)
     train_parser.add_argument("--batch-size", default=32, type=int)
@@ -132,8 +135,8 @@ def training_argparser():
     train_parser.add_argument("--sentence-limit", default=50, type=int)
     train_parser.add_argument(
         "--weighted", action="store_true", default=False,
-        help="Upweight positive labels to make them proportional to the " \
-             "negative labels.")   
+        help="Upweight positive labels to make them proportional to the "
+             "negative labels.")
     train_parser.add_argument("--loader-workers", type=int, default=8)
     train_parser.add_argument("--raml-samples", type=int, default=25)
     train_parser.add_argument("--raml-temp", type=float, default=.05)
@@ -162,6 +165,15 @@ def training_argparser():
     enc_parser.add_module_opts(
         "rnn", rnn_parser, help="RNN sentence encoder.")
 
+    bert_parser = argparse.ArgumentParser(usage=argparse.SUPPRESS)
+    bert_parser.add_argument(
+        "--pretrained_path", type=pathlib.Path, required=True,
+        help="Path to directory of pretrained BERT model.")
+    bert_parser.add_argument("--max_seq_length", default=128, type=int)
+
+    enc_parser.add_module_opts(
+        "bert", bert_parser, help="BERT sentence encoder.")
+
     ext_parser = ModuleArgumentSelector(
         "--ext", desc="Select sentence extractor module and settings.")
     rnn_ext_parser = sent_ext.RNNSentenceExtractor.argparser()
@@ -177,7 +189,6 @@ def training_argparser():
     ext_parser.add_module_opts(
         "sr", sr_ext_parser, help="SummaRunner sentence extractor.")
 
-
     parser = MultiModuleParser("train_model.py")
     parser.add_module("--trainer", train_parser)
     parser.add_module("--emb", emb_parser)
@@ -186,8 +197,9 @@ def training_argparser():
 
     return parser
 
+
 def create_model_from_args(embedding_context, args):
-   
+
     sent_encoder_type = args["enc"]["OPT"]
     del args["enc"]["OPT"]
 
@@ -200,6 +212,9 @@ def create_model_from_args(embedding_context, args):
     elif sent_encoder_type == "rnn":
         encoder = sent_enc.RNNSentenceEncoder(
             embedding_context.embedding_size, **args["enc"])
+    elif sent_encoder_type == "bert":
+        from pytorch_pretrained_bert.modeling import BertModel  # noqa
+        encoder = BertModel.from_pretrained(args["enc"]['pretrained_path'])
     else:
         raise Exception("Bad encoder type: {}".format(sent_encoder_type))
 
@@ -213,13 +228,17 @@ def create_model_from_args(embedding_context, args):
             encoder.size, **args["ext"])
     elif sent_extractor_type == "cl":
         extractor = sent_ext.ChengAndLapataSentenceExtractor(
-            encoder.size, **args["ext"])
+            # encoder.size, **args["ext"])
+            768, **args["ext"])
     elif sent_extractor_type == "sr":
         extractor = sent_ext.SummaRunnerSentenceExtractor(
             encoder.size, **args["ext"])
     else:
         raise Exception("Bad extractor type: {}".format(sent_encoder_type))
 
-    model = SummarizationModel(embedding_context, encoder, extractor)
+    if sent_encoder_type != "bert":
+        model = SummarizationModel(embedding_context, encoder, extractor)
+    else:
+        model = SummarizationBertModel(encoder, extractor)
 
     return model

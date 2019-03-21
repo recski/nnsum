@@ -22,33 +22,63 @@ def main():
     print()
     print(args["ext"])
 
-    print("Initializing vocabulary and embeddings.")
-    embedding_context = nnsum.io.initialize_embedding_context(
-        args["trainer"]["train_inputs"], **args["emb"])
+    embedding_context = None
+    if args["enc"]["OPT"] != 'bert':
+        print("Initializing vocabulary and embeddings.")
+        embedding_context = nnsum.io.initialize_embedding_context(
+            args["trainer"]["train_inputs"], **args["emb"])
 
     print("Loading training data.")
     if args["trainer"]["shuffle_sents"]:
         print("Shuffling sentences!")
-    train_data = nnsum.data.SummarizationDataset(
-        embedding_context.vocab,
-        args["trainer"]["train_inputs"],
-        targets_dir=args["trainer"]["train_labels"],
-        sentence_limit=args["trainer"]["sentence_limit"],
-        shuffle_sents=args["trainer"]["shuffle_sents"])
-    train_loader = nnsum.data.SummarizationDataLoader(
-        train_data, batch_size=args["trainer"]["batch_size"],
-        num_workers=args["trainer"]["loader_workers"])
+
+    if args["enc"]["OPT"] == 'bert':
+        train_data = nnsum.data.SummarizationDatasetForBert(
+            args['enc']['pretrained_path'],
+            args['enc']['max_seq_length'],
+            args["trainer"]["train_inputs"],
+            targets_dir=args["trainer"]["train_labels"],
+            sentence_limit=args["trainer"]["sentence_limit"],
+            shuffle_sents=args["trainer"]["shuffle_sents"])
+
+        train_loader = nnsum.data.SummarizationDataLoaderForBert(
+            train_data, batch_size=args["trainer"]["batch_size"],
+            num_workers=args["trainer"]["loader_workers"])
+    else:
+        train_data = nnsum.data.SummarizationDataset(
+            embedding_context.vocab,
+            args["trainer"]["train_inputs"],
+            targets_dir=args["trainer"]["train_labels"],
+            sentence_limit=args["trainer"]["sentence_limit"],
+            shuffle_sents=args["trainer"]["shuffle_sents"])
+
+        train_loader = nnsum.data.SummarizationDataLoader(
+            train_data, batch_size=args["trainer"]["batch_size"],
+            num_workers=args["trainer"]["loader_workers"])
 
     print("Loading validation data.")
-    val_data = nnsum.data.SummarizationDataset(
-        embedding_context.vocab,
-        args["trainer"]["valid_inputs"],
-        targets_dir=args["trainer"]["valid_labels"],
-        references_dir=args["trainer"]["valid_refs"],
-        sentence_limit=args["trainer"]["sentence_limit"])
-    val_loader = nnsum.data.SummarizationDataLoader(
-        val_data, batch_size=args["trainer"]["batch_size"],
-        num_workers=args["trainer"]["loader_workers"])
+    if args["enc"]["OPT"] == 'bert':
+        val_data = nnsum.data.SummarizationDatasetForBert(
+            args['enc']['pretrained_path'],
+            args['enc']['max_seq_length'],
+            args["trainer"]["valid_inputs"],
+            targets_dir=args["trainer"]["valid_labels"],
+            references_dir=args["trainer"]["valid_refs"],
+            sentence_limit=args["trainer"]["sentence_limit"])
+        val_loader = nnsum.data.SummarizationDataLoaderForBert(
+            val_data, batch_size=args["trainer"]["batch_size"],
+            num_workers=args["trainer"]["loader_workers"])
+    else:
+        val_data = nnsum.data.SummarizationDataset(
+            embedding_context.vocab,
+            args["trainer"]["valid_inputs"],
+            targets_dir=args["trainer"]["valid_labels"],
+            references_dir=args["trainer"]["valid_refs"],
+            sentence_limit=args["trainer"]["sentence_limit"])
+
+        val_loader = nnsum.data.SummarizationDataLoader(
+            val_data, batch_size=args["trainer"]["batch_size"],
+            num_workers=args["trainer"]["loader_workers"])
 
     if args["trainer"]["weighted"]:
         weight = nnsum.trainer.compute_class_weights(
@@ -74,6 +104,7 @@ def main():
         teacher_forcing=args["trainer"]["teacher_forcing"],
         model_path=args["trainer"]["model"],
         results_path=args["trainer"]["results"])
+
 
 if __name__ == "__main__":
     main()
