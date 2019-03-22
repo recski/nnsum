@@ -140,10 +140,17 @@ class SummarizationDataset(Dataset):
                 inp_data["pretty_sentence_lengths"]):
             try:
                 assert isent.tolist().index(0) == slen
-            except ValueError:
-                assert isent.size(0) == slen
-            except AttributeError:
-                pass
+            except (AssertionError, ValueError):
+                try:
+                    # full input (no padding)
+                    assert isent.size(0) in (slen, 3*slen), (isent, slen)
+                except AssertionError:
+                    try:
+                        # BERT input
+                        assert isent.tolist()[1].index(0) == slen
+                    except ValueError:
+                        # full BERT input (no padding)
+                        assert isent.size(1) == slen, isent.size()
 
         if self._targets_dir:
             targets_data = self._read_targets(raw_inputs_data, inp_data,
@@ -154,15 +161,6 @@ class SummarizationDataset(Dataset):
             inp_data["reference_paths"] = self._references_paths[index]
 
         return inp_data
-
-
-class InputFeatures(object):
-    """A single set of features of data."""
-
-    def __init__(self, input_ids, input_mask, segment_ids):
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
 
 
 class SummarizationDatasetForBert(SummarizationDataset):
@@ -204,11 +202,11 @@ class SummarizationDatasetForBert(SummarizationDataset):
         # to that length.
         if self.sentence_limit:
             doc_size = min(self.sentence_limit, doc_size)
-        sent_sizes = torch.LongTensor(
-            [len(sent["tokens"]) for sent in data["inputs"][:doc_size]])
 
-        features = []
-        for sentence in data['inputs']:
+        # document = torch.LongTensor(doc_size, 3, self._max_seq_length)
+        document = torch.LongTensor(doc_size, 3 * self._max_seq_length)
+        sent_sizes = torch.zeros(doc_size)
+        for c, sentence in enumerate(data['inputs']):
             tokens = self._tokenizer.tokenize(sentence['text'])
             if len(tokens) > self._max_seq_length - 2:
                 tokens = tokens[:(self._max_seq_length - 2)]
@@ -217,6 +215,7 @@ class SummarizationDatasetForBert(SummarizationDataset):
             segment_ids = [0] * len(tokens)
 
             input_ids = self._tokenizer.convert_tokens_to_ids(tokens)
+            sent_sizes[c] = len(input_ids)
 
             # The mask has 1 for real tokens and 0 for padding tokens.
             # Only real tokens are attended to.
@@ -232,9 +231,10 @@ class SummarizationDatasetForBert(SummarizationDataset):
             assert len(input_mask) == self._max_seq_length
             assert len(segment_ids) == self._max_seq_length
 
-            features.append(InputFeatures(
-                input_ids=input_ids, input_mask=input_mask,
-                segment_ids=segment_ids))
+            # document[c] = torch.LongTensor(
+            #    (input_ids, input_mask, segment_ids))
+            document[c] = torch.LongTensor(
+                input_ids + input_mask + segment_ids)
 
         # Get pretty sentences that are detokenized and their lengths for
         # generating the actual sentences.
@@ -243,6 +243,6 @@ class SummarizationDatasetForBert(SummarizationDataset):
             [len(sent.split()) for sent in pretty_sentences])
 
         return {"id": data["id"], "num_sentences": doc_size,
-                "sentence_lengths": sent_sizes, "document": features,
+                "sentence_lengths": sent_sizes, "document": document,
                 "pretty_sentences": pretty_sentences,
                 "pretty_sentence_lengths": pretty_sentence_lengths}

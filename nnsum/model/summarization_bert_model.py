@@ -23,19 +23,28 @@ class SummarizationBertModel(SummarizationModel):
     def forward(self, input, decoder_supervision=None, mask_logits=False,
                 return_attention=False):
 
-        batch = input.documents
-        input_ids = torch.tensor(
-            [f.input_ids for f in batch], dtype=torch.long)
-        input_mask = torch.tensor(
-            [f.input_mask for f in batch], dtype=torch.long)
-        segment_ids = torch.tensor(
-            [f.segment_ids for f in batch], dtype=torch.long)
+        batch_size, docs_size, seq_length = input.document.size()
+        assert seq_length % 3 == 0
+        seq_length //= 3
 
-        _, encoded_document = self.sentence_encoder(
-            input_ids, segment_ids, input_mask)
+        encoded_docs = torch.LongTensor(batch_size, 28, 768).to(
+            device=input.document.device)
+
+        for c, doc in enumerate(input.document):
+            input_ids, segment_ids, input_mask = doc.split(
+                seq_length, dim=-1)
+            print(
+                "arg sizes:", input_ids.size(), segment_ids.size(),
+                input_mask.size())
+            _, encoded_doc = self.sentence_encoder(
+                input_ids, segment_ids, input_mask)
+
+            print('encoded size:', encoded_doc.size())
+
+            encoded_docs[c] = encoded_doc
 
         logits_and_attention = self.sentence_extractor(
-            encoded_document,
+            encoded_docs,
             input.num_sentences,
             targets=decoder_supervision)
 

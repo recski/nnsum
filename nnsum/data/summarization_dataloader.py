@@ -38,13 +38,10 @@ class SummarizationDataLoader(DataLoader):
                 num_sentences = self.num_sentences.to(device)
                 sentence_lengths = self.sentence_lengths.to(device)
                 return self.__class__(self.id, document, targets,
-                                           num_sentences, sentence_lengths,
-                                           self.reference_paths,
-                                           self.sentence_texts,
-                                           self.pretty_sentence_lengths)
-
-
-
+                                      num_sentences, sentence_lengths,
+                                      self.reference_paths,
+                                      self.sentence_texts,
+                                      self.pretty_sentence_lengths)
 
     def _collate_fn(self, batch):
 
@@ -92,11 +89,12 @@ class SummarizationDataLoaderForBert(DataLoader):
             worker_init_fn=worker_init_fn, collate_fn=self._collate_fn)
 
     class SummarizationBertBatch(object):
-        def __init__(self, id, document, num_sentences,
+        def __init__(self, id, document, targets, num_sentences,
                      sentence_lengths, reference_paths,
                      sentence_texts, pretty_sentence_lengths):
             self.id = id
             self.document = document
+            self.targets = targets
             self.num_sentences = num_sentences
             self.sentence_lengths = sentence_lengths
             self.reference_paths = reference_paths
@@ -110,19 +108,24 @@ class SummarizationDataLoaderForBert(DataLoader):
                 document = self.document.to(device)
                 num_sentences = self.num_sentences.to(device)
                 sentence_lengths = self.sentence_lengths.to(device)
-                return self.__class__(self.id, document,
-                                           num_sentences, sentence_lengths,
-                                           self.reference_paths,
-                                           self.sentence_texts,
-                                           self.pretty_sentence_lengths)
-
+                return self.__class__(self.id, document, self.targets,
+                                      num_sentences, sentence_lengths,
+                                      self.reference_paths,
+                                      self.sentence_texts,
+                                      self.pretty_sentence_lengths)
 
     def _collate_fn(self, batch):
 
         batch.sort(key=lambda x: x["num_sentences"], reverse=True)
         ids = [item["id"] for item in batch]
+        # print('collate_fn batch shape:', len(batch))
+        # print('sizes:', [item['document'].size() for item in batch])
+        documents = batch_pad_and_stack_matrix(
+            [item["document"] for item in batch], 0)
+        # documents = torch.stack(
+        #     [item["document"] for item in batch])
 
-        documents = [item["document"] for item in batch]
+        # print('documents shape:', documents.size())
 
         num_sentences = torch.LongTensor(
             [item["num_sentences"] for item in batch])
@@ -138,7 +141,14 @@ class SummarizationDataLoaderForBert(DataLoader):
         else:
             reference_paths = None
 
+        if "targets" in batch[0]:
+            targets = batch_pad_and_stack_vector(
+                [item["targets"] for item in batch], -1)
+        else:
+            targets = None
+        targets = None
+
         return self.SummarizationBertBatch(
-            ids, documents, num_sentences,
+            ids, documents, targets, num_sentences,
             sentence_lengths, reference_paths,
             sentence_texts, pretty_sentence_lengths)

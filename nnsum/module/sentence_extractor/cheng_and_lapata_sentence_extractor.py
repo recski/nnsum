@@ -16,11 +16,11 @@ class ChengAndLapataSentenceExtractor(nn.Module):
 
         if cell == "gru":
             self.encoder_rnn = nn.GRU(
-                input_size, hidden_size, num_layers=num_layers, 
-                dropout=rnn_dropout if num_layers > 1 else 0., 
+                input_size, hidden_size, num_layers=num_layers,
+                dropout=rnn_dropout if num_layers > 1 else 0.,
                 bidirectional=False)
             self.decoder_rnn = nn.GRU(
-                input_size, hidden_size, num_layers=num_layers, 
+                input_size, hidden_size, num_layers=num_layers,
                 dropout=rnn_dropout if num_layers > 1 else 0.,
                 bidirectional=False)
         elif cell == "lstm":
@@ -55,7 +55,7 @@ class ChengAndLapataSentenceExtractor(nn.Module):
             mlp.append(nn.Linear(inp_size, out_size))
             mlp.append(nn.ReLU())
             mlp.append(nn.Dropout(p=dropout))
-            inp_size = out_size 
+            inp_size = out_size
         mlp.append(nn.Linear(inp_size, 1))
         self.mlp = nn.Sequential(*mlp)
 
@@ -79,12 +79,12 @@ class ChengAndLapataSentenceExtractor(nn.Module):
     def _apply_rnn(self, rnn, packed_input, rnn_state=None, batch_first=True):
         packed_output, updated_rnn_state = rnn(packed_input, rnn_state)
         output, _ = nn.utils.rnn.pad_packed_sequence(
-            packed_output, 
+            packed_output,
             batch_first=batch_first)
         output = F.dropout(output, p=self.rnn_dropout, training=self.training)
         return output, updated_rnn_state
 
-    def _teacher_forcing_forward(self, sentence_embeddings, num_sentences, 
+    def _teacher_forcing_forward(self, sentence_embeddings, num_sentences,
                                  targets):
 
         length_list = num_sentences.data.tolist()
@@ -95,9 +95,9 @@ class ChengAndLapataSentenceExtractor(nn.Module):
             sentence_embeddings, length_list, batch_first=True)
 
         encoder_output, rnn_state = self._apply_rnn(
-            self.encoder_rnn, 
+            self.encoder_rnn,
             packed_sentence_embeddings)
-        
+
         weighted_decoder_input = sentence_embeddings[:,:-1] \
             * targets.view(batch_size, -1,1)[:,:-1]
 
@@ -113,21 +113,21 @@ class ChengAndLapataSentenceExtractor(nn.Module):
         return logits
 
     def _predict_forward(self, sentence_embeddings, num_sentences):
- 
+
         length_list = num_sentences.data.tolist()
 
         sequence_size = sentence_embeddings.size(1)
         batch_size = sentence_embeddings.size(0)
 
         packed_sentence_embeddings = nn.utils.rnn.pack_padded_sequence(
-            sentence_embeddings.permute(1, 0, 2), 
+            sentence_embeddings.permute(1, 0, 2),
             length_list, batch_first=False)
 
         encoder_output, rnn_state = self._apply_rnn(
-            self.encoder_rnn, 
-            packed_sentence_embeddings, 
+            self.encoder_rnn,
+            packed_sentence_embeddings,
             batch_first=False)
- 
+
         encoder_outputs = encoder_output.split(1, dim=0)
         start_emb = self.decoder_start.view(1, 1, -1).repeat(1, batch_size, 1)
         decoder_inputs = sentence_embeddings.permute(1,0,2).split(1, dim=0)
@@ -151,6 +151,8 @@ class ChengAndLapataSentenceExtractor(nn.Module):
         return logits
 
     def forward(self, sentence_embeddings, num_sentences, targets=None):
+        print('got:', type(sentence_embeddings), sentence_embeddings.size())
+        print('got:', type(num_sentences), num_sentences.size())
         if self.training and self.teacher_forcing:
             return self._teacher_forcing_forward(
                 sentence_embeddings, num_sentences, targets)
@@ -166,17 +168,17 @@ class ChengAndLapataSentenceExtractor(nn.Module):
                 if logger:
                     logger.info(" {} ({}): Xavier normal init.".format(
                         name, ",".join([str(x) for x in p.size()])))
-                nn.init.xavier_normal_(p)    
+                nn.init.xavier_normal_(p)
             elif "bias" in name:
                 if logger:
                     logger.info(" {} ({}): constant (0) init.".format(
                         name, ",".join([str(x) for x in p.size()])))
-                nn.init.constant_(p, 0)    
+                nn.init.constant_(p, 0)
             else:
                 if logger:
                     logger.info(" {} ({}): random normal init.".format(
                         name, ",".join([str(x) for x in p.size()])))
-                nn.init.normal_(p)    
+                nn.init.normal_(p)
         if logger:
             logger.info(
                 " ChengAndLapataSentenceExtractor initialization finished.")

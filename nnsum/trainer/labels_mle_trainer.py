@@ -169,8 +169,12 @@ def create_trainer(model, optimizer, pos_weight=None, grad_clip=5, gpu=-1):
         model.train()
         batch = batch.to(gpu)
         optimizer.zero_grad()
-        logits = model(
-            batch, decoder_supervision=batch.targets.float())
+        if batch.targets is None:
+            # BERT
+            logits = model(batch)
+        else:
+            logits = model(
+                batch, decoder_supervision=batch.targets.float())
         mask = batch.targets.gt(-1).float()
         total_sentences_batch = int(batch.num_sentences.data.sum())
 
