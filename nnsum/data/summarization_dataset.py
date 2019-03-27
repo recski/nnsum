@@ -206,7 +206,7 @@ class SummarizationDatasetForBert(SummarizationDataset):
         # document = torch.LongTensor(doc_size, 3, self._max_seq_length)
         document = torch.LongTensor(doc_size, 3 * self._max_seq_length)
         sent_sizes = torch.zeros(doc_size)
-        for c, sentence in enumerate(data['inputs']):
+        for c, sentence in enumerate(data['inputs'][:doc_size]):
             tokens = self._tokenizer.tokenize(sentence['text'])
             if len(tokens) > self._max_seq_length - 2:
                 tokens = tokens[:(self._max_seq_length - 2)]

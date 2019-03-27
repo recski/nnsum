@@ -27,21 +27,14 @@ class SummarizationBertModel(SummarizationModel):
         assert seq_length % 3 == 0
         seq_length //= 3
 
-        encoded_docs = torch.LongTensor(batch_size, 28, 768).to(
+        encoded_docs = torch.FloatTensor(batch_size, docs_size, 768).to(
             device=input.document.device)
 
         for c, doc in enumerate(input.document):
             input_ids, segment_ids, input_mask = doc.split(
                 seq_length, dim=-1)
-            print(
-                "arg sizes:", input_ids.size(), segment_ids.size(),
-                input_mask.size())
-            _, encoded_doc = self.sentence_encoder(
+            _, encoded_docs[c] = self.sentence_encoder(
                 input_ids, segment_ids, input_mask)
-
-            print('encoded size:', encoded_doc.size())
-
-            encoded_docs[c] = encoded_doc
 
         logits_and_attention = self.sentence_extractor(
             encoded_docs,

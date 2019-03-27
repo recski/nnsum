@@ -46,7 +46,6 @@ class SummarizationDataLoader(DataLoader):
     def _collate_fn(self, batch):
 
         pad = self.dataset.vocab.pad_index
-
         batch.sort(key=lambda x: x["num_sentences"], reverse=True)
         ids = [item["id"] for item in batch]
         documents = batch_pad_and_stack_matrix(
@@ -106,9 +105,13 @@ class SummarizationDataLoaderForBert(DataLoader):
                 return self
             else:
                 document = self.document.to(device)
+                if self.targets is not None:
+                    targets = self.targets.to(device)
+                else:
+                    targets = None
                 num_sentences = self.num_sentences.to(device)
                 sentence_lengths = self.sentence_lengths.to(device)
-                return self.__class__(self.id, document, self.targets,
+                return self.__class__(self.id, document, targets,
                                       num_sentences, sentence_lengths,
                                       self.reference_paths,
                                       self.sentence_texts,
@@ -118,14 +121,8 @@ class SummarizationDataLoaderForBert(DataLoader):
 
         batch.sort(key=lambda x: x["num_sentences"], reverse=True)
         ids = [item["id"] for item in batch]
-        # print('collate_fn batch shape:', len(batch))
-        # print('sizes:', [item['document'].size() for item in batch])
         documents = batch_pad_and_stack_matrix(
             [item["document"] for item in batch], 0)
-        # documents = torch.stack(
-        #     [item["document"] for item in batch])
-
-        # print('documents shape:', documents.size())
 
         num_sentences = torch.LongTensor(
             [item["num_sentences"] for item in batch])
@@ -146,7 +143,6 @@ class SummarizationDataLoaderForBert(DataLoader):
                 [item["targets"] for item in batch], -1)
         else:
             targets = None
-        targets = None
 
         return self.SummarizationBertBatch(
             ids, documents, targets, num_sentences,

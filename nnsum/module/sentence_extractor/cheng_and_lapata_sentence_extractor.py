@@ -98,8 +98,8 @@ class ChengAndLapataSentenceExtractor(nn.Module):
             self.encoder_rnn,
             packed_sentence_embeddings)
 
-        weighted_decoder_input = sentence_embeddings[:,:-1] \
-            * targets.view(batch_size, -1,1)[:,:-1]
+        weighted_decoder_input = sentence_embeddings[:, :-1] \
+            * targets.view(batch_size, -1, 1)[:, :-1]
 
         start_emb = self.decoder_start.view(1, 1, -1).repeat(batch_size, 1, 1)
         decoder_input = torch.cat([start_emb, weighted_decoder_input], 1)
@@ -130,7 +130,7 @@ class ChengAndLapataSentenceExtractor(nn.Module):
 
         encoder_outputs = encoder_output.split(1, dim=0)
         start_emb = self.decoder_start.view(1, 1, -1).repeat(1, batch_size, 1)
-        decoder_inputs = sentence_embeddings.permute(1,0,2).split(1, dim=0)
+        decoder_inputs = sentence_embeddings.permute(1, 0, 2).split(1, dim=0)
 
         logits = []
         decoder_input_t = start_emb
@@ -151,8 +151,6 @@ class ChengAndLapataSentenceExtractor(nn.Module):
         return logits
 
     def forward(self, sentence_embeddings, num_sentences, targets=None):
-        print('got:', type(sentence_embeddings), sentence_embeddings.size())
-        print('got:', type(num_sentences), num_sentences.size())
         if self.training and self.teacher_forcing:
             return self._teacher_forcing_forward(
                 sentence_embeddings, num_sentences, targets)
