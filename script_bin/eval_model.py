@@ -26,9 +26,12 @@ def main():
     parser.add_argument(
         "--model", type=pathlib.Path, required=True)
     parser.add_argument(
+        "--bert", type=pathlib.Path, required=False)
+    parser.add_argument("--max_seq_length", default=128, type=int)
+    parser.add_argument(
         "--results", type=pathlib.Path, required=False, default=None)
- 
-    args = parser.parse_args() 
+
+    args = parser.parse_args()
 
     if args.loader_workers is None:
         args.loader_workers = min(16, cpu_count())
@@ -37,16 +40,26 @@ def main():
     model = torch.load(args.model, map_location=lambda storage, loc: storage)
     if args.gpu > -1:
         model.cuda(args.gpu)
-    vocab = model.embeddings.vocab
     print(" OK!")
 
-    data = nnsum.data.SummarizationDataset(
-        vocab,
-        args.inputs,
-        references_dir=args.refs,
-        sentence_limit=args.sentence_limit)
-    loader = nnsum.data.SummarizationDataLoader(
-        data, batch_size=args.batch_size, num_workers=args.loader_workers)
+    if isinstance(model, nnsum.model.SummarizationBertModel):
+        data = nnsum.data.SummarizationDatasetForBert(
+            args.bert,
+            args.max_seq_length,
+            args.inputs,
+            references_dir=args.refs,
+            sentence_limit=args.sentence_limit)
+        loader = nnsum.data.SummarizationDataLoaderForBert(
+            data, batch_size=args.batch_size, num_workers=args.loader_workers)
+    else:
+        vocab = model.embeddings.vocab
+        data = nnsum.data.SummarizationDataset(
+            vocab,
+            args.inputs,
+            references_dir=args.refs,
+            sentence_limit=args.sentence_limit)
+        loader = nnsum.data.SummarizationDataLoader(
+            data, batch_size=args.batch_size, num_workers=args.loader_workers)
 
     ids = []
     path_data = []
@@ -56,12 +69,12 @@ def main():
             for step, batch in enumerate(loader, 1):
                 batch = batch.to(args.gpu)
                 print("generating summaries {} / {} ...".format(
-                        step, len(loader)),
+                    step, len(loader)),
                     end="\r" if step < len(loader) else "\n", flush=True)
                 texts = model.predict(batch, max_length=args.summary_length)
-                
+
                 for text, ref_paths in zip(texts, batch.reference_paths):
-                    summary = "\n".join(text)                
+                    summary = "\n".join(text)
                     summary_path = manager.create_temp_file(summary)
                     path_data.append(
                         [summary_path, [str(x) for x in ref_paths]])
@@ -70,22 +83,23 @@ def main():
         config_text = rouge_papier.util.make_simple_config_text(path_data)
         config_path = manager.create_temp_file(config_text)
         df = rouge_papier.compute_rouge(
-            config_path, max_ngram=2, lcs=True, 
+            config_path, max_ngram=2, lcs=True,
             remove_stopwords=args.remove_stopwords,
             length=args.summary_length)
         df.index = ids + ["average"]
         df = pd.concat([df[:-1].sort_index(), df[-1:]], axis=0)
         print(df[-1:])
-       
+
         if args.results:
             records = df[:-1].to_dict("records")
 
-            results = {"idividual": {id: record 
+            results = {"idividual": {id: record
                                      for id, record in zip(ids, records)},
                        "average": df[-1:].to_dict("records")[0]}
             args.results.parent.mkdir(parents=True, exist_ok=True)
             with args.results.open("w") as fp:
                 fp.write(json.dumps(results))
-        
+
+
 if __name__ == "__main__":
     main()
