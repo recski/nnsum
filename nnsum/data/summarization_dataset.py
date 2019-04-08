@@ -246,3 +246,74 @@ class SummarizationDatasetForBert(SummarizationDataset):
                 "sentence_lengths": sent_sizes, "document": document,
                 "pretty_sentences": pretty_sentences,
                 "pretty_sentence_lengths": pretty_sentence_lengths}
+
+
+class SummarizationDatasetForTagging(Dataset):
+    def __init__(self, tokenizer, max_seq_length, data, sentence_limit):
+        self._tokenizer = tokenizer
+        self._data = data
+        self._max_seq_length = max_seq_length
+        self._sentence_limit = sentence_limit
+
+    @property
+    def sentence_limit(self):
+        return self._sentence_limit
+
+    def __len__(self):
+        return 1
+
+    def __getitem__(self, index):
+        assert index == 0
+        # Get the length of the document in sentences.
+        d = self._data
+        doc_size = len(d["sentences"])
+
+        # Get the token lengths of each sentence and the maximum sentence
+        # sentence length. If sentence_limit is set, truncate document
+        # to that length.
+        if self.sentence_limit:
+            doc_size = min(self.sentence_limit, doc_size)
+
+        # document = torch.LongTensor(doc_size, 3, self._max_seq_length)
+        document = torch.LongTensor(doc_size, 3 * self._max_seq_length)
+        sent_sizes = torch.zeros(doc_size)
+        for c, sentence in enumerate(d['sentences'][:doc_size]):
+            tokens = self._tokenizer.tokenize(sentence)
+            if len(tokens) > self._max_seq_length - 2:
+                tokens = tokens[:(self._max_seq_length - 2)]
+
+            tokens = ["[CLS]"] + tokens + ["[SEP]"]
+            segment_ids = [0] * len(tokens)
+
+            input_ids = self._tokenizer.convert_tokens_to_ids(tokens)
+            sent_sizes[c] = len(input_ids)
+
+            # The mask has 1 for real tokens and 0 for padding tokens.
+            # Only real tokens are attended to.
+            input_mask = [1] * len(input_ids)
+
+            # Zero-pad up to the sequence length.
+            padding = [0] * (self._max_seq_length - len(input_ids))
+            input_ids += padding
+            input_mask += padding
+            segment_ids += padding
+
+            assert len(input_ids) == self._max_seq_length
+            assert len(input_mask) == self._max_seq_length
+            assert len(segment_ids) == self._max_seq_length
+
+            # document[c] = torch.LongTensor(
+            #    (input_ids, input_mask, segment_ids))
+            document[c] = torch.LongTensor(
+                input_ids + input_mask + segment_ids)
+
+        # Get pretty sentences that are detokenized and their lengths for
+        # generating the actual sentences.
+        pretty_sentences = d["sentences"][:doc_size]
+        pretty_sentence_lengths = torch.LongTensor(
+            [len(sent.split()) for sent in pretty_sentences])
+
+        return {"id": d["article_id"], "num_sentences": doc_size,
+                "sentence_lengths": sent_sizes, "document": document,
+                "pretty_sentences": pretty_sentences,
+                "pretty_sentence_lengths": pretty_sentence_lengths}
